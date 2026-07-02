@@ -25,15 +25,13 @@
             width: 100vw;
             height: 100vh;
         }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 4px;
+        /* Unsichtbarer Scrollbar für das gestreckte Panel */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
         }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
+        .no-scrollbar {
+            -ms-overflow-style: none; /* IE and Edge */
+            scrollbar-width: none; /* Firefox */
         }
         #webgl-canvas {
             touch-action: none;
@@ -89,7 +87,7 @@
                     </button>
                 </div>
                 
-                <div class="space-y-4 text-xs custom-scrollbar max-h-64 overflow-y-auto pr-1">
+                <div class="space-y-4 text-xs no-scrollbar max-h-[calc(100vh-14rem)] overflow-y-auto pr-1">
                     
                     <!-- Interaktions-Typ -->
                     <div>
@@ -372,13 +370,13 @@
             const x = worldX * 0.12;
             const z = worldZ * 0.12;
             
-            // 1. Stufe Domain Warping (Großflächige, flüssige Strömungen)
-            const qx = Perlin.noise(x * 0.35 + t * 0.02, z * 0.35) * 3.8;
-            const qz = Perlin.noise(x * 0.35, z * 0.35 + t * 0.018) * 3.8;
+            // 1. Stufe Domain Warping (Strömungen mutieren und fließen jetzt auch gegenläufig)
+            const qx = Perlin.noise(x * 0.35 + t * 0.025, z * 0.35 - t * 0.01) * 3.8;
+            const qz = Perlin.noise(x * 0.35 - t * 0.015, z * 0.35 + t * 0.02) * 3.8;
             
-            // 2. Stufe Domain Warping (Hochfrequente Störungen, bricht die "Wolken"-Formen auf)
-            const rx = Perlin.noise((x + qx) * 0.95 - t * 0.015, (z + qz) * 0.95) * 1.6;
-            const rz = Perlin.noise((x + qx) * 0.95, (z + qz) * 0.95 + t * 0.02) * 1.6;
+            // 2. Stufe Domain Warping (Wirbel verändern ihre Form)
+            const rx = Perlin.noise((x + qx) * 0.95 - t * 0.03, (z + qz) * 0.95 + t * 0.015) * 1.6;
+            const rz = Perlin.noise((x + qx) * 0.95 + t * 0.02, (z + qz) * 0.95 - t * 0.025) * 1.6;
             
             let nx = x + qx + rx;
             let nz = z + qz + rz;
@@ -391,8 +389,13 @@
             let signal = 0.0;
 
             for (let i = 0; i < 3; i++) {
+                // NEU: Jede Detail-Schicht (Oktave) driftet unterschiedlich schnell. 
+                // Das bricht die statische Form auf und lässt das Terrain aktiv MORPHEN!
+                const timeDriftX = t * 0.06 * (i + 1.0);
+                const timeDriftZ = t * 0.04 * (i + 1.0);
+
                 // Absolutes Rauschen spiegelt die Wellen zu Tälern um -> scharfe Kämme
-                let n = Perlin.noise(nx * frequency, nz * frequency);
+                let n = Perlin.noise(nx * frequency + timeDriftX, nz * frequency - timeDriftZ);
                 signal = 1.0 - Math.abs(n);
                 
                 // Quadrieren macht Kämme spitzer und Täler flacher
@@ -415,10 +418,10 @@
             
             // Normalisierung auf [0, 1]
             let normVal = value / 1.35;
-            let normValClamped = Math.max(0.0, Math.min(1.0, normVal));
+            normVal = Math.max(0.0, Math.min(1.0, normVal));
             
             // Starke Potenzierung erzeugt die weiten, schwarzen Täler und isolierten Bergketten
-            return Math.pow(normValClamped, 3.4);
+            return Math.pow(normVal, 3.4);
         }
 
         // --- Initialisierung ---
