@@ -120,10 +120,19 @@
                         <input type="range" id="strength-slider" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
                     </div>
 
-                    <!-- NEU: Beleuchtung & Helligkeit -->
+                    <!-- Beleuchtung & Helligkeit -->
                     <div class="border-t border-purple-500/20 pt-3 space-y-4">
                         <span class="text-purple-200/90 font-medium block text-xs tracking-wider uppercase"><i class="fa-solid fa-lightbulb mr-1.5"></i>Licht & Atmosphäre</span>
                         
+                        <!-- NEU: Maus-Licht entkoppeln -->
+                        <div class="flex items-center justify-between py-1 bg-purple-950/20 px-2 rounded-lg border border-purple-950/50">
+                            <span class="text-purple-200/90 font-medium">Maus-Licht entkoppeln</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="decouple-light-toggle" class="sr-only peer">
+                                <div class="w-9 h-5 bg-purple-950 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-purple-300 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                            </label>
+                        </div>
+
                         <!-- Lichtstärke Regler -->
                         <div>
                             <div class="flex justify-between mb-1">
@@ -207,6 +216,25 @@
                             <input type="range" id="tilt-slider" min="0" max="45" step="1" value="0" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
                         </div>
                     </div>
+
+                    <!-- NEU: Recorder-Modus -->
+                    <div class="border-t border-purple-500/20 pt-3 mt-3 space-y-3">
+                        <span class="text-purple-200/90 font-medium block text-xs tracking-wider uppercase"><i class="fa-solid fa-video mr-1.5"></i>Recorder-Modus</span>
+                        <p class="text-[10px] text-purple-300/60 leading-normal">
+                            Nimmt die reine 3D-Szene direkt aus dem Canvas als Video auf. Alle Menüs und UI-Elemente werden automatisch ausgeschlossen.
+                        </p>
+                        <div class="flex flex-col gap-2">
+                            <button id="record-btn" class="w-full bg-red-900/40 hover:bg-red-800/60 border border-red-500/40 hover:border-red-500/70 rounded-lg py-2 px-3 font-semibold transition-all text-xs text-red-200 flex items-center justify-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse inline-block mr-1" id="record-indicator" style="display:none;"></span>
+                                <i class="fa-solid fa-circle text-red-500 text-[10px]" id="record-icon"></i>
+                                <span id="record-text">Aufnahme starten</span>
+                            </button>
+                            <div id="recording-status" class="hidden text-[10px] text-center text-red-400 font-mono animate-pulse">
+                                Aufnahme läuft: <span id="record-timer">00:00</span>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -324,6 +352,11 @@
         let interactionRadius = 4.5;
         let interactionStrength = 1.2;
 
+        // Variablen für entkoppeltes Licht
+        let lightWorld = new THREE.Vector3(0, 0, 0);
+        let lightActive = false;
+        let decoupleLight = false;
+
         // Vorab allokiertes Array für die Zwei-Pass-Höhen- und Schattenberechnung
         const heightMap = new Float32Array(GRID_SIZE * GRID_SIZE);
 
@@ -404,11 +437,12 @@
             camera.position.set(0, cameraYHeight, 0);
             camera.lookAt(0, -1, 0); // Senkrecht nach unten blickend
 
-            // WebGL Renderer konfigurieren
+            // WebGL Renderer konfigurieren - preserveDrawingBuffer wird für flüssige Videoaufnahmen benötigt
             renderer = new THREE.WebGLRenderer({
                 canvas: canvas,
                 antialias: true,
-                powerPreference: "high-performance"
+                powerPreference: "high-performance",
+                preserveDrawingBuffer: true
             });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -558,6 +592,7 @@
             const lightVal = document.getElementById('light-val');
             const fogSlider = document.getElementById('fog-slider');
             const fogVal = document.getElementById('fog-val');
+            const decoupleLightToggle = document.getElementById('decouple-light-toggle');
 
             // Event-Listener für Live-Beleuchtungsstärke
             lightSlider.addEventListener('input', (e) => {
@@ -573,6 +608,22 @@
                 const density = parseFloat(e.target.value);
                 fogVal.textContent = density.toFixed(2);
                 scene.fog.density = density;
+            });
+
+            // Event-Listener für Maus-Licht-Entkopplung
+            decoupleLightToggle.addEventListener('change', (e) => {
+                decoupleLight = e.target.checked;
+                if (decoupleLight) {
+                    // Friert das Licht am aktuellen Maus-Treffpunkt oder im Zentrum (0,0,0) ein
+                    if (!mouseActive || mouseWorld.x < -9000) {
+                        lightWorld.set(0, 0, 0);
+                    } else {
+                        lightWorld.copy(mouseWorld);
+                    }
+                    lightActive = true;
+                } else {
+                    lightActive = mouseActive;
+                }
             });
 
             rotateToggle.addEventListener('change', (e) => {
@@ -723,10 +774,128 @@
                 fogVal.textContent = "0.07";
                 scene.fog.density = 0.07;
 
+                decoupleLightToggle.checked = false;
+                decoupleLight = false;
+                lightActive = false;
+
                 targetCamX = 0;
                 targetCamZ = 0;
                 targetCameraYHeight = 15.5;
             });
+
+            // Recorder Variablen
+            let mediaRecorder;
+            let recordedChunks = [];
+            let isRecording = false;
+            let recordStartTime;
+            let recordInterval;
+
+            const recordBtn = document.getElementById('record-btn');
+            const recordIcon = document.getElementById('record-icon');
+            const recordText = document.getElementById('record-text');
+            const recordIndicator = document.getElementById('record-indicator');
+            const recordingStatus = document.getElementById('recording-status');
+            const recordTimer = document.getElementById('record-timer');
+
+            recordBtn.addEventListener('click', () => {
+                if (!isRecording) {
+                    startRecording();
+                } else {
+                    stopRecording();
+                }
+            });
+
+            function startRecording() {
+                recordedChunks = [];
+                
+                // Unterstützte Videoformate detektieren und Bitrate auf 25 Mbps erzwingen
+                let options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 25000000 };
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/webm; codecs=vp8', videoBitsPerSecond: 25000000 };
+                }
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/webm', videoBitsPerSecond: 25000000 };
+                }
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { videoBitsPerSecond: 25000000 }; // Fallback
+                }
+
+                try {
+                    const stream = canvas.captureStream(60); // Aufnahme mit 60 FPS für butterweiche Bewegungen
+                    mediaRecorder = new MediaRecorder(stream, options);
+                    
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data && event.data.size > 0) {
+                            recordedChunks.push(event.data);
+                        }
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const url = URL.createObjectURL(blob);
+                        
+                        // Direkt-Download initialisieren
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `abyss-of-violet-rec-${Date.now()}.webm`;
+                        document.body.appendChild(a);
+                        a.click();
+                        setTimeout(() => {
+                            document.body.removeChild(a);
+                            window.URL.revokeObjectURL(url);
+                        }, 100);
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordStartTime = Date.now();
+                    
+                    // UI updaten
+                    recordBtn.classList.remove('bg-red-900/40', 'hover:bg-red-800/60', 'border-red-500/40');
+                    recordBtn.classList.add('bg-neutral-800', 'hover:bg-neutral-700', 'border-neutral-500');
+                    recordIcon.className = "fa-solid fa-square text-white text-[10px]";
+                    recordText.textContent = "Aufnahme stoppen";
+                    recordIndicator.style.display = "inline-block";
+                    recordingStatus.classList.remove('hidden');
+
+                    recordInterval = setInterval(() => {
+                        const elapsed = Math.floor((Date.now() - recordStartTime) / 1000);
+                        const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+                        const seconds = String(elapsed % 60).padStart(2, '0');
+                        recordTimer.textContent = `${minutes}:${seconds}`;
+                    }, 1000);
+
+                } catch (err) {
+                    console.error("Recording failed:", err);
+                    recordingStatus.textContent = "Fehler: Aufnahme im Browser/Iframe blockiert.";
+                    recordingStatus.classList.remove('hidden', 'text-red-400');
+                    recordingStatus.classList.add('text-amber-500');
+                    setTimeout(() => {
+                        recordingStatus.classList.add('hidden');
+                        recordingStatus.textContent = "Aufnahme läuft: 00:00";
+                        recordingStatus.classList.remove('text-amber-500');
+                        recordingStatus.classList.add('text-red-400');
+                    }, 4000);
+                }
+            }
+
+            function stopRecording() {
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
+                isRecording = false;
+                clearInterval(recordInterval);
+                
+                // UI zurücksetzen
+                recordBtn.classList.add('bg-red-900/40', 'hover:bg-red-800/60', 'border-red-500/40');
+                recordBtn.classList.remove('bg-neutral-800', 'hover:bg-neutral-700', 'border-neutral-500');
+                recordIcon.className = "fa-solid fa-circle text-red-500 text-[10px]";
+                recordText.textContent = "Aufnahme starten";
+                recordIndicator.style.display = "none";
+                recordingStatus.classList.add('hidden');
+                recordTimer.textContent = "00:00";
+            }
 
             window.addEventListener('resize', onWindowResize);
 
@@ -806,7 +975,7 @@
                         }
                     }
 
-                    // Baut ein minimales, stabiles Grundrauschen ein (Kein steriler, flacher Boden mehr)
+                    // Baut ein minimales, stabiles Grundrauschen ein (Kein steriler, flacher Boden)
                     const baseRandom = 0.015 + hash2D(worldX, worldZ) * 0.04;
                     finalHeightVal = Math.max(baseRandom, Math.min(1.0, finalHeightVal + influence));
                     const currentHeight = finalHeightVal * maxSäulenHöhe;
@@ -869,10 +1038,10 @@
                         b = b_hell + t * (b_weiss - b_hell);
                     }
 
-                    // Interaktives Spotlight (Licht-Glow an der Mausstelle)
-                    if (mouseActive) {
-                        const dx = worldX - mouseWorld.x;
-                        const dz = worldZ - mouseWorld.z;
+                    // Interaktives/Entkoppeltes Spotlight
+                    if (lightActive) {
+                        const dx = worldX - lightWorld.x;
+                        const dz = worldZ - lightWorld.z;
                         const distSq = dx * dx + dz * dz;
                         const lightRadius = interactionRadius * 1.6;
                         const lightRadiusSq = lightRadius * lightRadius;
@@ -946,6 +1115,16 @@
 
             if (isAnimated) {
                 animationTime += 0.01 * animSpeed;
+            }
+
+            // Licht-Positionsverwaltung
+            if (!decoupleLight) {
+                if (mouseActive) {
+                    lightWorld.copy(mouseWorld);
+                    lightActive = true;
+                } else {
+                    lightActive = false;
+                }
             }
 
             updatePillars();
