@@ -811,16 +811,23 @@
             function startRecording() {
                 recordedChunks = [];
                 
-                // Unterstützte Videoformate detektieren und Bitrate auf 25 Mbps erzwingen
-                let options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 25000000 };
+                // Unterstützte Videoformate detektieren (MP4 priorisieren) und Bitrate auf 25 Mbps erzwingen
+                let options = { mimeType: 'video/mp4; codecs="avc1.424028"', videoBitsPerSecond: 25000000 };
+                let fileExt = 'mp4';
+                let blobType = 'video/mp4';
+
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { mimeType: 'video/webm; codecs=vp8', videoBitsPerSecond: 25000000 };
+                    options = { mimeType: 'video/mp4', videoBitsPerSecond: 25000000 };
+                }
+                
+                // Fallback für Firefox oder Browser, die nativ kein MP4-Recording unterstützen
+                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+                    options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 25000000 };
+                    fileExt = 'webm';
+                    blobType = 'video/webm';
                 }
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { mimeType: 'video/webm', videoBitsPerSecond: 25000000 };
-                }
-                if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { videoBitsPerSecond: 25000000 }; // Fallback
+                    options = { videoBitsPerSecond: 25000000 }; // Absoluter Fallback
                 }
 
                 try {
@@ -834,14 +841,14 @@
                     };
 
                     mediaRecorder.onstop = () => {
-                        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                        const blob = new Blob(recordedChunks, { type: blobType });
                         const url = URL.createObjectURL(blob);
                         
                         // Direkt-Download initialisieren
                         const a = document.createElement('a');
                         a.style.display = 'none';
                         a.href = url;
-                        a.download = `abyss-of-violet-rec-${Date.now()}.webm`;
+                        a.download = `abyss-of-violet-rec-${Date.now()}.${fileExt}`;
                         document.body.appendChild(a);
                         a.click();
                         setTimeout(() => {
