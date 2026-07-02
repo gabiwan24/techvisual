@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinite Violet Pillars - 3D Visualizer</title>
+    <!-- Tailwind CSS für ein modernes, edles UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome für elegante Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js für die 3D-Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            transition: cursor 0.2s ease;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        #webgl-canvas {
+            touch-action: none;
+            cursor: none; /* Versteckt den Standard-Mauszeiger auf dem Canvas */
+        }
+        /* Klasse zum vollständigen Ausblenden des Mauszeigers */
+        .no-cursor, .no-cursor * {
+            cursor: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div id="ui-container" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6 transition-opacity duration-300">
+        
+        <!-- Header -->
+        <header class="flex flex-col sm:flex-row justify-between items-start gap-4 pointer-events-auto">
+            <div class="bg-black/80 backdrop-blur-md border border-purple-500/20 rounded-xl p-4 text-white max-w-sm shadow-2xl">
+                <div class="flex items-center gap-3 mb-1">
+                    <div class="w-3 h-3 rounded-full bg-purple-500 animate-pulse"></div>
+                    <h1 class="text-base md:text-lg font-bold tracking-wider uppercase text-purple-200">Abyss of Violet</h1>
+                </div>
+                <p class="text-xs text-purple-300/80 leading-relaxed">
+                    Unendliches, hochdichtes Nadel-Feld mit organischen Faltenkämmen, interaktivem Maus-Wellenfeld und Echtzeit-Lichtspur.
+                </p>
+            </div>
+            
+            <!-- Interaktive Steuerungsinfo -->
+            <div class="bg-black/80 backdrop-blur-md border border-purple-500/20 rounded-xl px-4 py-3 text-white flex flex-col gap-1 shadow-2xl">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-wand-magic-sparkles text-purple-400 animate-pulse text-lg"></i>
+                    <div class="text-xs">
+                        <span class="font-semibold block text-purple-200">Maus-Interaktion</span>
+                        <span class="text-purple-300/70">Maus bewegen für Verformung & Lichtspur | Klicken zum Greifen</span>
+                    </div>
+                </div>
+                <div class="border-t border-purple-500/10 mt-1.5 pt-1 flex items-center gap-2">
+                    <span class="bg-purple-900/60 border border-purple-500/30 px-1.5 py-0.5 rounded text-[10px] font-mono text-purple-200">SPACE</span>
+                    <span class="text-[10px] text-purple-300/60">UI & Cursor ein-/ausblenden</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Einstellungs-Panel & Footer -->
+        <footer class="flex flex-col md:flex-row gap-4 items-end justify-between w-full pointer-events-none">
+            <!-- Parameter Steuerungsbox -->
+            <div class="bg-black/85 backdrop-blur-lg border border-purple-500/30 rounded-2xl p-5 text-white w-full md:w-80 pointer-events-auto shadow-2xl transition-all duration-300 hover:border-purple-500/50">
+                <div class="flex justify-between items-center mb-4 border-b border-purple-500/20 pb-2">
+                    <span class="font-bold text-sm tracking-wide text-purple-300"><i class="fa-solid fa-sliders mr-2"></i>STEUERUNG</span>
+                    <button id="reset-btn" class="text-xs bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/30 px-2 py-1 rounded transition-all text-purple-200">
+                        Zurücksetzen
+                    </button>
+                </div>
+                
+                <div class="space-y-4 text-xs custom-scrollbar max-h-64 overflow-y-auto pr-1">
+                    
+                    <!-- Interaktions-Typ -->
+                    <div>
+                        <span class="text-purple-200/90 font-medium block mb-1.5">Maus-Effekt</span>
+                        <div class="grid grid-cols-4 gap-1 bg-purple-950/40 p-1 rounded-lg border border-purple-500/20">
+                            <button id="mode-push" class="mode-btn bg-purple-600 text-white rounded py-1 px-1 font-bold transition-all text-[10px]">Delle</button>
+                            <button id="mode-pull" class="mode-btn hover:bg-purple-900/40 text-purple-300 rounded py-1 px-1 transition-all text-[10px]">Hügel</button>
+                            <button id="mode-wave" class="mode-btn hover:bg-purple-900/40 text-purple-300 rounded py-1 px-1 transition-all text-[10px]">Welle</button>
+                            <button id="mode-none" class="mode-btn hover:bg-purple-900/40 text-purple-300 rounded py-1 px-1 transition-all text-[10px]">Aus</button>
+                        </div>
+                    </div>
+
+                    <!-- Interaktions-Radius -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-purple-200/90 font-medium">Interaktions-Radius</span>
+                            <span id="radius-val" class="text-purple-400 font-bold">4.5</span>
+                        </div>
+                        <input type="range" id="radius-slider" min="1.5" max="9.0" step="0.1" value="4.5" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Interaktions-Stärke -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-purple-200/90 font-medium">Interaktions-Stärke</span>
+                            <span id="strength-val" class="text-purple-400 font-bold">1.2</span>
+                        </div>
+                        <input type="range" id="strength-slider" min="0.2" max="3.0" step="0.1" value="1.2" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- NEU: Beleuchtung & Helligkeit -->
+                    <div class="border-t border-purple-500/20 pt-3 space-y-4">
+                        <span class="text-purple-200/90 font-medium block text-xs tracking-wider uppercase"><i class="fa-solid fa-lightbulb mr-1.5"></i>Licht & Atmosphäre</span>
+                        
+                        <!-- Lichtstärke Regler -->
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-purple-200/90 font-medium">Licht-Helligkeit</span>
+                                <span id="light-val" class="text-purple-400 font-bold">1.50</span>
+                            </div>
+                            <input type="range" id="light-slider" min="0.5" max="4.5" step="0.1" value="1.50" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Nebel dichte Regler -->
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-purple-200/90 font-medium">Nebel-Dichte (Tiefe)</span>
+                                <span id="fog-val" class="text-purple-400 font-bold">0.07</span>
+                            </div>
+                            <input type="range" id="fog-slider" min="0.01" max="0.15" step="0.01" value="0.07" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- Brennweiten-Regler -->
+                    <div class="border-t border-purple-500/20 pt-3">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-purple-200/90 font-medium">Brennweite (Objektiv)</span>
+                            <span id="focal-val" class="text-purple-400 font-bold">18 mm</span>
+                        </div>
+                        <input type="range" id="focal-slider" min="12" max="50" value="18" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Höhenskalierung -->
+                    <div>
+                        <div class="flex justify-between mb-1">
+                            <span class="text-purple-200/90 font-medium">Maximale Stangenhöhe</span>
+                            <span id="height-val" class="text-purple-400 font-bold">14</span>
+                        </div>
+                        <input type="range" id="height-slider" min="5" max="25" step="0.5" value="14" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Wellen-Animation ein/aus -->
+                    <div class="flex items-center justify-between py-1 bg-purple-950/20 px-2 rounded-lg border border-purple-950/50">
+                        <span class="text-purple-200/90 font-medium">Wellen-Animation</span>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="animate-toggle" checked class="sr-only peer">
+                            <div class="w-9 h-5 bg-purple-950 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-purple-300 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                        </label>
+                    </div>
+
+                    <!-- Animationsgeschwindigkeit -->
+                    <div id="speed-container">
+                        <div class="flex justify-between mb-1">
+                            <span class="text-purple-200/90 font-medium">Geschwindigkeit</span>
+                            <span id="speed-val" class="text-purple-400 font-bold">Mittel</span>
+                        </div>
+                        <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="0.4" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- Kamera-Rotation & Neigung -->
+                    <div class="border-t border-purple-500/20 pt-3 mt-3 space-y-4">
+                        <span class="text-purple-200/90 font-medium block text-xs tracking-wider uppercase"><i class="fa-solid fa-arrows-spin mr-1.5"></i>Kamera-Drehung</span>
+                        
+                        <div class="flex items-center justify-between py-1 bg-purple-950/20 px-2 rounded-lg border border-purple-950/50">
+                            <span class="text-purple-200/90 font-medium">Auto-Rotation</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="rotate-toggle" class="sr-only peer">
+                                <div class="w-9 h-5 bg-purple-950 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-purple-300 after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                            </label>
+                        </div>
+
+                        <div id="rotate-speed-container" class="opacity-30 pointer-events-none transition-opacity duration-200">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-purple-200/90 font-medium">Rotations-Tempo</span>
+                                <span id="rotate-speed-val" class="text-purple-400 font-bold">0.5</span>
+                            </div>
+                            <input type="range" id="rotate-speed-slider" min="0.1" max="2.0" step="0.1" value="0.5" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-purple-200/90 font-medium">Blickwinkel (Neigung)</span>
+                                <span id="tilt-val" class="text-purple-400 font-bold">0°</span>
+                            </div>
+                            <input type="range" id="tilt-slider" min="0" max="45" step="1" value="0" class="w-full accent-purple-500 bg-purple-950/50 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Technische Daten & Info -->
+            <div class="bg-black/80 backdrop-blur-md border border-purple-500/20 rounded-xl p-4 text-white text-[11px] w-full md:w-64 pointer-events-auto flex flex-col gap-1 shadow-2xl">
+                <div class="flex justify-between"><span class="text-purple-300/70">Engine:</span><span class="font-mono text-purple-200">Three.js (WebGL2)</span></div>
+                <div class="flex justify-between"><span class="text-purple-300/70">Instanz-Säulen:</span><span class="font-mono text-purple-200">32.400 (Nadel-Raster)</span></div>
+                <div class="flex justify-between"><span class="text-purple-300/70">Kamerahöhe:</span><span class="font-mono text-purple-400 font-bold" id="cam-height-display">15.5</span></div>
+                <div class="flex justify-between"><span class="text-purple-300/70">Kamera-Feld:</span><span class="font-mono text-purple-400 font-bold" id="cam-pos">X: 0.00 | Z: 0.00</span></div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+
+    <script>
+        const Perlin = {
+            p: new Int32Array(512),
+            init() {
+                const permutation = new Int32Array(256);
+                for (let i = 0; i < 256; i++) permutation[i] = i;
+                // Deterministischer Shuffle
+                for (let i = 255; i > 0; i--) {
+                    const j = (Math.random() * (i + 1)) | 0;
+                    const tmp = permutation[i];
+                    permutation[i] = permutation[j];
+                    permutation[j] = tmp;
+                }
+                for (let i = 0; i < 512; i++) {
+                    this.p[i] = permutation[i & 255];
+                }
+            },
+            noise(x, y) {
+                const X = Math.floor(x) & 255;
+                const Y = Math.floor(y) & 255;
+                const xf = x - Math.floor(x);
+                const yf = y - Math.floor(y);
+                
+                // Quintische Fade-Kurve
+                const u = xf * xf * xf * (xf * (xf * 6 - 15) + 10);
+                const v = yf * yf * yf * (yf * (yf * 6 - 15) + 10);
+                
+                const p = this.p;
+                const aa = p[p[X] + Y];
+                const ab = p[p[X] + Y + 1];
+                const ba = p[p[X + 1] + Y];
+                const bb = p[p[X + 1] + Y + 1];
+                
+                const grad = (hash, x, y) => {
+                    const h = hash & 7;
+                    const u = h < 4 ? x : y;
+                    const v = h < 4 ? y : x;
+                    return ((h & 1) ? -u : u) + ((h & 2) ? -2.0 * v : 2.0 * v);
+                };
+                
+                const x1 = grad(aa, xf, yf) + u * (grad(ba, xf - 1, yf) - grad(aa, xf, yf));
+                const x2 = grad(ab, xf, yf - 1) + u * (grad(bb, xf - 1, yf - 1) - grad(ab, xf, yf - 1));
+                
+                return x1 + v * (x2 - x1);
+            }
+        };
+        Perlin.init();
+
+        // Deterministischer High-Frequency Generator, um flackerfreies Grundrauschen beim Panning zu garantieren
+        function hash2D(x, z) {
+            const val = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453123;
+            return val - Math.floor(val);
+        }
+
+        // Berechnet den vertikalen FOV basierend auf der Brennweite (35mm Äquivalent)
+        function focalLengthToFov(focalLength) {
+            return 2 * Math.atan(12 / focalLength) * (180 / Math.PI);
+        }
+
+        // --- Globale Variablen & Konfiguration ---
+        let scene, camera, renderer;
+        let instancedMesh;
+        let keyLight, fillLight, ambientLight; // Beleuchtungsreferenzen zur Live-Steuerung
+        
+        // Hohe Auflösung für die Nadeln (180x180 = 32.400 Säulen)
+        const GRID_SIZE = 180;
+        const COLUMN_WIDTH = 0.082;
+        const COLUMN_GAP = 0.038;
+        const SPACING = COLUMN_WIDTH + COLUMN_GAP; // Genau 0.12 Einheiten pro Schritt
+
+        // Kamerahöhen-Verwaltung (Reaktiver und weicher Übergang)
+        let targetCameraYHeight = 15.5; 
+        let cameraYHeight = 15.5; 
+        let targetCamX = 0;
+        let targetCamZ = 0;
+        let camX = 0;
+        let camZ = 0;
+
+        // Rotations- und Neigungsparameter
+        let isRotating = false;
+        let rotateSpeed = 0.5;
+        let rotationAngle = 0;
+        let cameraTiltAngle = 0; // In Grad (0° = Senkrechte Draufsicht)
+
+        // Animationsparameter
+        let animationTime = 0;
+        let maxSäulenHöhe = 14;
+        let isAnimated = true;
+        let animSpeed = 0.4;
+
+        // --- Maus-Interaktionsdaten ---
+        let mouse = new THREE.Vector2(-9999, -9999);
+        let raycaster = new THREE.Raycaster();
+        let targetPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0); // X-Z Ebene zur Schnittpunkt-Detektion
+        let mouseWorld = new THREE.Vector3(-9999, 0, -9999);
+        let mouseActive = false;
+        
+        let interactionMode = 'push'; // 'push', 'pull', 'wave', 'none'
+        let interactionRadius = 4.5;
+        let interactionStrength = 1.2;
+
+        // Vorab allokiertes Array für die Zwei-Pass-Höhen- und Schattenberechnung
+        const heightMap = new Float32Array(GRID_SIZE * GRID_SIZE);
+
+        // Farbkanäle zur Vermeidung von GC-Allokationen in der Schleife
+        const r_schwarz = 0.0, g_schwarz = 0.0, b_schwarz = 0.0;
+        const r_tief = 0.07, g_tief = 0.0, b_tief = 0.16; // 0x120029 (Tiefes Indigo-Violett)
+        const r_mittel = 0.41, g_mittel = 0.05, b_mittel = 0.68; // 0x6a0da3 (Sattes, lebhaftes Purpur)
+        const r_hell = 0.84, g_hell = 0.63, b_hell = 0.91; // 0xd69ee8 (Lila/Flieder)
+        const r_weiss = 0.98, g_weiss = 0.96, b_weiss = 1.0; // 0xfaf5ff (Extrem glühendes Weiß)
+
+        // --- Mathematische Modellierung: Ridged FBM mit Double Domain Warping ---
+        function getNoiseHeight(worldX, worldZ, t) {
+            const x = worldX * 0.12;
+            const z = worldZ * 0.12;
+            
+            // 1. Stufe Domain Warping (Großflächige, flüssige Strömungen)
+            const qx = Perlin.noise(x * 0.35 + t * 0.02, z * 0.35) * 3.8;
+            const qz = Perlin.noise(x * 0.35, z * 0.35 + t * 0.018) * 3.8;
+            
+            // 2. Stufe Domain Warping (Hochfrequente Störungen, bricht die "Wolken"-Formen auf)
+            const rx = Perlin.noise((x + qx) * 0.95 - t * 0.015, (z + qz) * 0.95) * 1.6;
+            const rz = Perlin.noise((x + qx) * 0.95, (z + qz) * 0.95 + t * 0.02) * 1.6;
+            
+            let nx = x + qx + rx;
+            let nz = z + qz + rz;
+            
+            // Ridged Multi-fractal Loop (3 Octaves für maximale Detaildichte & scharfe Kämme)
+            let value = 0.0;
+            let amplitude = 1.0;
+            let frequency = 0.55;
+            let weight = 1.0;
+            let signal = 0.0;
+
+            for (let i = 0; i < 3; i++) {
+                // Absolutes Rauschen spiegelt die Wellen zu Tälern um -> scharfe Kämme
+                let n = Perlin.noise(nx * frequency, nz * frequency);
+                signal = 1.0 - Math.abs(n);
+                
+                // Quadrieren macht Kämme spitzer und Täler flacher
+                signal *= signal;
+                
+                // Multi-fractal Gewichtung: Detail konzentriert sich nur auf die Spitzen
+                signal *= weight;
+                weight = Math.min(1.0, signal * 2.2);
+
+                value += signal * amplitude;
+
+                // Frequenz- & Amplitudensprung für die nächste Oktive
+                frequency *= 2.35;
+                amplitude *= 0.42;
+                
+                // Versatz, um Symmetrien zwischen den Layern zu brechen
+                nx += 13.7;
+                nz += 29.1;
+            }
+            
+            // Normalisierung auf [0, 1]
+            let normVal = value / 1.35;
+            let normValClamped = Math.max(0.0, Math.min(1.0, normVal));
+            
+            // Starke Potenzierung erzeugt die weiten, schwarzen Täler und isolierten Bergketten
+            return Math.pow(normValClamped, 3.4);
+        }
+
+        // --- Initialisierung ---
+        function init() {
+            const canvas = document.getElementById('webgl-canvas');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000); // Tiefschwarz
+            
+            // Dichter Nebel absorbiert den Sichtfeldrand nahtlos (Wert kann über UI skaliert werden)
+            scene.fog = new THREE.FogExp2(0x000000, 0.07);
+
+            // Kamera mit 18mm Weitwinkel-Fov initialisieren (starke perspektivische Verzerrung)
+            const initialFov = focalLengthToFov(18);
+            camera = new THREE.PerspectiveCamera(initialFov, window.innerWidth / window.innerHeight, 0.1, 55);
+            camera.position.set(0, cameraYHeight, 0);
+            camera.lookAt(0, -1, 0); // Senkrecht nach unten blickend
+
+            // WebGL Renderer konfigurieren
+            renderer = new THREE.WebGLRenderer({
+                canvas: canvas,
+                antialias: true,
+                powerPreference: "high-performance"
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.25;
+
+            // --- Streiflicht-Beleuchtung (für 3D-Kanten-Reflexionen) ---
+            ambientLight = new THREE.AmbientLight(0x020005, 0.15);
+            scene.add(ambientLight);
+
+            // Sehr flaches Führungslicht von links oben
+            keyLight = new THREE.DirectionalLight(0xffebff, 1.5);
+            keyLight.position.set(-20, 10, 15);
+            scene.add(keyLight);
+
+            // Tiefviolettes Gegenlicht
+            fillLight = new THREE.DirectionalLight(0x5900cc, 1.0);
+            fillLight.position.set(20, 7, -15);
+            scene.add(fillLight);
+
+            // --- Instanced Mesh Setup ---
+            const geometry = new THREE.BoxGeometry(COLUMN_WIDTH, 1, COLUMN_WIDTH);
+            geometry.translate(0, 0.5, 0); // Drehpunkt an die Unterseite verschieben
+
+            const material = new THREE.MeshStandardMaterial({
+                roughness: 0.22, // Glänzende Reflexionen auf den Kanten
+                metalness: 0.05,
+                flatShading: true // Hebt die Geometrie jeder einzelnen Stange plastisch hervor
+            });
+
+            const totalInstances = GRID_SIZE * GRID_SIZE;
+            instancedMesh = new THREE.InstancedMesh(geometry, material, totalInstances);
+            scene.add(instancedMesh);
+
+            // --- Interaktion & Steuerung (Flüssiges Draggen) ---
+            let isDragging = false;
+            let startPointerX = 0;
+            let startPointerY = 0;
+
+            const onPointerDown = (e) => {
+                isDragging = true;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+                startPointerX = clientX;
+                startPointerY = clientY;
+            };
+
+            const onPointerMove = (e) => {
+                // Ermittle Bildschirmpositionen
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+                // 3D Raycasting zur Schnittpunkt-Berechnung im Raum (wenn Maus auf dem Canvas aktiv ist)
+                if (mouseActive) {
+                    mouse.x = (clientX / window.innerWidth) * 2 - 1;
+                    mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+                    raycaster.setFromCamera(mouse, camera);
+                    raycaster.ray.intersectPlane(targetPlane, mouseWorld);
+                }
+
+                if (!isDragging) return;
+                
+                const deltaX = clientX - startPointerX;
+                const deltaY = clientY - startPointerY;
+
+                const currentFov = camera.fov;
+                const speedFactor = 0.00015 * currentFov; 
+
+                // Rotationskompensation für das Ziehen berechnen, damit die Steuerung immer synchron zur Ansicht bleibt
+                const cos = Math.cos(rotationAngle);
+                const sin = Math.sin(rotationAngle);
+
+                // Bewegung auf der X-Z-Ebene relativ zur Kamera-Ausrichtung anpassen
+                targetCamX -= (deltaX * cos - deltaY * sin) * speedFactor;
+                targetCamZ -= (deltaX * sin + deltaY * cos) * speedFactor;
+
+                startPointerX = clientX;
+                startPointerY = clientY;
+            };
+
+            const onPointerUp = () => {
+                isDragging = false;
+            };
+
+            // Event-Listener für Zeigerbewegungen
+            canvas.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mousemove', onPointerMove);
+            window.addEventListener('mouseup', onPointerUp);
+
+            canvas.addEventListener('touchstart', onPointerDown, { passive: true });
+            window.addEventListener('touchmove', onPointerMove, { passive: true });
+            window.addEventListener('touchend', onPointerUp);
+
+            // Mausverfolgung aktivieren & deaktivieren beim Betreten/Verlassen des Canvas
+            canvas.addEventListener('mouseenter', () => {
+                mouseActive = true;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                mouseActive = false;
+            });
+
+            // --- Mausrad-/Trackpad-Scrollen zur Höhensteuerung ---
+            window.addEventListener('wheel', (e) => {
+                const scale = targetCameraYHeight * 0.0012;
+                targetCameraYHeight += e.deltaY * scale;
+                targetCameraYHeight = Math.max(4.0, Math.min(38.0, targetCameraYHeight));
+            }, { passive: true });
+
+            // --- Keydown Lauscher für Space-Toggle (UI & Cursor) ---
+            let uiVisible = true;
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' || e.key === ' ') {
+                    e.preventDefault(); // Verhindert Standard-Scrolling des Browsers bei Space
+                    uiVisible = !uiVisible;
+                    const uiContainer = document.getElementById('ui-container');
+                    
+                    if (uiVisible) {
+                        uiContainer.classList.remove('opacity-0', 'pointer-events-none');
+                        document.body.classList.remove('no-cursor');
+                    } else {
+                        uiContainer.classList.add('opacity-0', 'pointer-events-none');
+                        document.body.classList.add('no-cursor');
+                    }
+                }
+            });
+
+            // --- UI-Events ---
+            const focalSlider = document.getElementById('focal-slider');
+            const focalVal = document.getElementById('focal-val');
+            const heightSlider = document.getElementById('height-slider');
+            const heightVal = document.getElementById('height-val');
+            const animateToggle = document.getElementById('animate-toggle');
+            const speedSlider = document.getElementById('speed-slider');
+            const speedVal = document.getElementById('speed-val');
+            const resetBtn = document.getElementById('reset-btn');
+
+            // UI-Elemente für Rotation & Neigung binden
+            const rotateToggle = document.getElementById('rotate-toggle');
+            const rotateSpeedSlider = document.getElementById('rotate-speed-slider');
+            const rotateSpeedVal = document.getElementById('rotate-speed-val');
+            const tiltSlider = document.getElementById('tilt-slider');
+            const tiltVal = document.getElementById('tilt-val');
+
+            // UI-Elemente für Live-Licht & Nebelsteuerung
+            const lightSlider = document.getElementById('light-slider');
+            const lightVal = document.getElementById('light-val');
+            const fogSlider = document.getElementById('fog-slider');
+            const fogVal = document.getElementById('fog-val');
+
+            // Event-Listener für Live-Beleuchtungsstärke
+            lightSlider.addEventListener('input', (e) => {
+                const intensity = parseFloat(e.target.value);
+                lightVal.textContent = intensity.toFixed(2);
+                keyLight.intensity = intensity;
+                fillLight.intensity = intensity * 0.66; // Halte das Verhältniss der Lichtstärken synchron
+                ambientLight.intensity = Math.max(0.05, intensity * 0.1); // Sanft anhebendes Umgebungslicht
+            });
+
+            // Event-Listener für Nebelsteuerung
+            fogSlider.addEventListener('input', (e) => {
+                const density = parseFloat(e.target.value);
+                fogVal.textContent = density.toFixed(2);
+                scene.fog.density = density;
+            });
+
+            rotateToggle.addEventListener('change', (e) => {
+                isRotating = e.target.checked;
+                const container = document.getElementById('rotate-speed-container');
+                if (isRotating) {
+                    container.classList.remove('opacity-30', 'pointer-events-none');
+                } else {
+                    container.classList.add('opacity-30', 'pointer-events-none');
+                }
+            });
+
+            rotateSpeedSlider.addEventListener('input', (e) => {
+                rotateSpeed = parseFloat(e.target.value);
+                rotateSpeedVal.textContent = rotateSpeed.toFixed(1);
+            });
+
+            tiltSlider.addEventListener('input', (e) => {
+                cameraTiltAngle = parseInt(e.target.value);
+                tiltVal.textContent = cameraTiltAngle + "°";
+            });
+
+            // Interaktions-Parameter
+            const radiusSlider = document.getElementById('radius-slider');
+            const radiusVal = document.getElementById('radius-val');
+            const strengthSlider = document.getElementById('strength-slider');
+            const strengthVal = document.getElementById('strength-val');
+
+            focalSlider.addEventListener('input', (e) => {
+                const fl = parseInt(e.target.value);
+                focalVal.textContent = fl + " mm";
+                camera.fov = focalLengthToFov(fl);
+                camera.updateProjectionMatrix();
+            });
+
+            heightSlider.addEventListener('input', (e) => {
+                maxSäulenHöhe = parseFloat(e.target.value);
+                heightVal.textContent = maxSäulenHöhe;
+            });
+
+            animateToggle.addEventListener('change', (e) => {
+                isAnimated = e.target.checked;
+                const container = document.getElementById('speed-container');
+                if(isAnimated) {
+                    container.style.opacity = '1';
+                    container.style.pointerEvents = 'auto';
+                } else {
+                    container.style.opacity = '0.3';
+                    container.style.pointerEvents = 'none';
+                }
+            });
+
+            speedSlider.addEventListener('input', (e) => {
+                animSpeed = parseFloat(e.target.value);
+                if (animSpeed < 0.3) speedVal.textContent = "Sehr Langsam";
+                else if (animSpeed < 0.9) speedVal.textContent = "Mittel";
+                else speedVal.textContent = "Schnell";
+            });
+
+            // Interaktionssteuerung Events
+            radiusSlider.addEventListener('input', (e) => {
+                interactionRadius = parseFloat(e.target.value);
+                radiusVal.textContent = interactionRadius.toFixed(1);
+            });
+
+            strengthSlider.addEventListener('input', (e) => {
+                interactionStrength = parseFloat(e.target.value);
+                strengthVal.textContent = interactionStrength.toFixed(1);
+            });
+
+            // Interaktions-Modus Buttons registrieren
+            const modeButtons = {
+                push: document.getElementById('mode-push'),
+                pull: document.getElementById('mode-pull'),
+                wave: document.getElementById('mode-wave'),
+                none: document.getElementById('mode-none')
+            };
+
+            const setActiveButton = (activeMode) => {
+                Object.keys(modeButtons).forEach(mode => {
+                    const btn = modeButtons[mode];
+                    if (mode === activeMode) {
+                        btn.className = "mode-btn bg-purple-600 text-white rounded py-1 px-1 font-bold transition-all text-[10px]";
+                    } else {
+                        btn.className = "mode-btn hover:bg-purple-900/40 text-purple-300 rounded py-1 px-1 transition-all text-[10px]";
+                    }
+                });
+            };
+
+            modeButtons.push.addEventListener('click', () => { interactionMode = 'push'; setActiveButton('push'); });
+            modeButtons.pull.addEventListener('click', () => { interactionMode = 'pull'; setActiveButton('pull'); });
+            modeButtons.wave.addEventListener('click', () => { interactionMode = 'wave'; setActiveButton('wave'); });
+            modeButtons.none.addEventListener('click', () => { interactionMode = 'none'; setActiveButton('none'); });
+
+            // Reset Button
+            resetBtn.addEventListener('click', () => {
+                focalSlider.value = 18;
+                focalVal.textContent = "18 mm";
+                camera.fov = focalLengthToFov(18);
+                camera.updateProjectionMatrix();
+
+                heightSlider.value = 14;
+                heightVal.textContent = "14";
+                maxSäulenHöhe = 14;
+
+                animateToggle.checked = true;
+                isAnimated = true;
+                document.getElementById('speed-container').style.opacity = '1';
+                document.getElementById('speed-container').style.pointerEvents = 'auto';
+
+                speedSlider.value = 0.4;
+                speedVal.textContent = "Mittel";
+                animSpeed = 0.4;
+
+                // Reset Interaktion
+                radiusSlider.value = 4.5;
+                radiusVal.textContent = "4.5";
+                interactionRadius = 4.5;
+
+                strengthSlider.value = 1.2;
+                strengthVal.textContent = "1.2";
+                interactionStrength = 1.2;
+
+                interactionMode = 'push';
+                setActiveButton('push');
+
+                // Reset Rotation & Tilt
+                rotateToggle.checked = false;
+                isRotating = false;
+                document.getElementById('rotate-speed-container').classList.add('opacity-30', 'pointer-events-none');
+                rotateSpeedSlider.value = 0.5;
+                rotateSpeedVal.textContent = "0.5";
+                rotateSpeed = 0.5;
+                rotationAngle = 0;
+
+                tiltSlider.value = 0;
+                tiltVal.textContent = "0°";
+                cameraTiltAngle = 0;
+
+                // Reset Beleuchtung & Atmosphäre
+                lightSlider.value = 1.50;
+                lightVal.textContent = "1.50";
+                keyLight.intensity = 1.5;
+                fillLight.intensity = 1.0;
+                ambientLight.intensity = 0.15;
+
+                fogSlider.value = 0.07;
+                fogVal.textContent = "0.07";
+                scene.fog.density = 0.07;
+
+                targetCamX = 0;
+                targetCamZ = 0;
+                targetCameraYHeight = 15.5;
+            });
+
+            window.addEventListener('resize', onWindowResize);
+
+            animate();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Zwei-Pass-Rendering & Shading Loop ---
+        const dummyColor = new THREE.Color();
+        const dummyMatrix = new THREE.Matrix4();
+
+        function updatePillars() {
+            // Endlos-Snapping auf das exakte Rastermaß
+            const snapX = Math.floor(camX / SPACING) * SPACING;
+            const snapZ = Math.floor(camZ / SPACING) * SPACING;
+
+            const halfGrid = GRID_SIZE / 2;
+
+            // --- PASS 1: Alle Höhenwerte in ein schnelles Float32Array vorberechnen ---
+            let index = 0;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                const localX = (x - halfGrid) * SPACING;
+                const worldX = snapX + localX;
+                
+                for (let z = 0; z < GRID_SIZE; z++) {
+                    const localZ = (z - halfGrid) * SPACING;
+                    const worldZ = snapZ + localZ;
+
+                    heightMap[index++] = getNoiseHeight(worldX, worldZ, animationTime);
+                }
+            }
+
+            // --- PASS 2: Slope/Neigung berechnen & Instanzen updaten ---
+            index = 0;
+            for (let x = 0; x < GRID_SIZE; x++) {
+                const localX = (x - halfGrid) * SPACING;
+                const worldX = snapX + localX;
+
+                for (let z = 0; z < GRID_SIZE; z++) {
+                    const localZ = (z - halfGrid) * SPACING;
+                    const worldZ = snapZ + localZ;
+
+                    const noiseVal = heightMap[index];
+                    let finalHeightVal = noiseVal;
+
+                    // Dynamische Verformung durch Mausberechnung
+                    let influence = 0;
+                    if (mouseActive && interactionMode !== 'none') {
+                        const dx = worldX - mouseWorld.x;
+                        const dz = worldZ - mouseWorld.z;
+                        const distSq = dx * dx + dz * dz;
+                        const radiusSq = interactionRadius * interactionRadius;
+
+                        if (distSq < radiusSq) {
+                            const dist = Math.sqrt(distSq);
+                            // Weicher Übergang für die Wirkung (Quintischer Falloff)
+                            const t = 1.0 - (dist / interactionRadius);
+                            const falloff = t * t * (3.0 - 2.0 * t); // Smoothstep
+
+                            if (interactionMode === 'push') {
+                                // Herunterdrücken (Delle)
+                                influence = -falloff * (interactionStrength * 0.45);
+                            } else if (interactionMode === 'pull') {
+                                // Hochziehen (Kuppel)
+                                influence = falloff * (interactionStrength * 0.45);
+                            } else if (interactionMode === 'wave') {
+                                // Sinuswellen um den Cursor
+                                const waveSpeed = animationTime * 8.0;
+                                const frequency = 2.4;
+                                influence = Math.sin(dist * frequency - waveSpeed) * falloff * (interactionStrength * 0.25);
+                            }
+                        }
+                    }
+
+                    // Baut ein minimales, stabiles Grundrauschen ein (Kein steriler, flacher Boden mehr)
+                    const baseRandom = 0.015 + hash2D(worldX, worldZ) * 0.04;
+                    finalHeightVal = Math.max(baseRandom, Math.min(1.0, finalHeightVal + influence));
+                    const currentHeight = finalHeightVal * maxSäulenHöhe;
+
+                    // Neigung der Oberfläche über die Nachbarschafts-Differenzen im Gitter ermitteln
+                    const idxRight = x < GRID_SIZE - 1 ? index + GRID_SIZE : index;
+                    const idxLeft = x > 0 ? index - GRID_SIZE : index;
+                    const idxFront = z < GRID_SIZE - 1 ? index + 1 : index;
+                    const idxBack = z > 0 ? index - 1 : index;
+
+                    const slopeX = heightMap[idxRight] - heightMap[idxLeft];
+                    const slopeZ = heightMap[idxFront] - heightMap[idxBack];
+
+                    // Oberflächennormale approximieren (Neigungs-Skalierung verstärkt Schattenwirkung)
+                    const nx = -slopeX * 9.0;
+                    const nz = -slopeZ * 9.0;
+                    const ny = 1.0;
+                    const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+                    const normX = nx / len;
+                    const normY = ny / len;
+                    const normZ = nz / len;
+
+                    // Lichtrichtung (Virtuelle Lichtquelle oben links: [-0.65, 0.6, 0.5])
+                    const lx = -0.65, ly = 0.6, lz = 0.5;
+                    const lLen = Math.sqrt(lx*lx + ly*ly + lz*lz);
+                    const lNormX = lx / lLen;
+                    const lNormY = ly / lLen;
+                    const lNormZ = lz / lLen;
+
+                    // Diffuses Lichtprodukt berechnen [0.08 bis 1.0] (Gegenlicht-Aufhellung)
+                    let diffuse = normX * lNormX + normY * lNormY + normZ * lNormZ;
+                    diffuse = Math.max(0.08, (diffuse + 1.0) * 0.5);
+
+                    // Matrix-Zuweisung
+                    dummyMatrix.makeScale(1, currentHeight, 1);
+                    dummyMatrix.setPosition(worldX, 0, worldZ);
+                    instancedMesh.setMatrixAt(index, dummyMatrix);
+
+                    // Allokationsfreie RGB-Farbpixel-Mischung basierend auf dem finalen deformierten Wert
+                    let r, g, b;
+                    if (finalHeightVal < 0.15) {
+                        const t = finalHeightVal / 0.15;
+                        r = r_schwarz + t * (r_tief - r_schwarz);
+                        g = g_schwarz + t * (g_tief - g_schwarz);
+                        b = b_schwarz + t * (b_tief - b_schwarz);
+                    } else if (finalHeightVal < 0.48) {
+                        const t = (finalHeightVal - 0.15) / 0.33;
+                        r = r_tief + t * (r_mittel - r_tief);
+                        g = g_tief + t * (g_mittel - g_tief);
+                        b = b_tief + t * (b_mittel - b_tief);
+                    } else if (finalHeightVal < 0.82) {
+                        const t = (finalHeightVal - 0.48) / 0.34;
+                        r = r_mittel + t * (r_hell - r_mittel);
+                        g = g_mittel + t * (g_hell - g_mittel);
+                        b = b_mittel + t * (b_hell - b_mittel);
+                    } else {
+                        const t = (finalHeightVal - 0.82) / 0.18;
+                        r = r_hell + t * (r_weiss - r_hell);
+                        g = g_hell + t * (g_weiss - g_hell);
+                        b = b_hell + t * (b_weiss - b_hell);
+                    }
+
+                    // Interaktives Spotlight (Licht-Glow an der Mausstelle)
+                    if (mouseActive) {
+                        const dx = worldX - mouseWorld.x;
+                        const dz = worldZ - mouseWorld.z;
+                        const distSq = dx * dx + dz * dz;
+                        const lightRadius = interactionRadius * 1.6;
+                        const lightRadiusSq = lightRadius * lightRadius;
+
+                        if (distSq < lightRadiusSq) {
+                            const dist = Math.sqrt(distSq);
+                            const t = 1.0 - (dist / lightRadius);
+                            const lightIntensity = t * t * (3.0 - 2.0 * t) * 1.3; // Stufenlose Glüh-Intensität
+
+                            // Fügt der Farbe unter der Maus ein magisches Leuchten hinzu (pink-weißes Glühen)
+                            r += lightIntensity * 0.45;
+                            g += lightIntensity * 0.12;
+                            b += lightIntensity * 0.65;
+                        }
+                    }
+
+                    // Schattenfaktor multiplikativ anwenden
+                    r *= diffuse;
+                    g *= diffuse;
+                    b *= diffuse;
+
+                    dummyColor.setRGB(Math.min(1.0, r), Math.min(1.0, g), Math.min(1.0, b));
+                    instancedMesh.setColorAt(index, dummyColor);
+
+                    index++;
+                }
+            }
+
+            instancedMesh.instanceMatrix.needsUpdate = true;
+            if (instancedMesh.instanceColor) {
+                instancedMesh.instanceColor.needsUpdate = true;
+            }
+        }
+
+        // --- Hauptschleife ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Dämpfung (Inertia) für die Kamerabewegung auf der X-Z-Ebene
+            camX += (targetCamX - camX) * 0.08;
+            camZ += (targetCamZ - camZ) * 0.08;
+
+            // Weiche Höhenanpassung (Lerping) der Kamera für stufenlosen Zoom
+            cameraYHeight += (targetCameraYHeight - cameraYHeight) * 0.1;
+
+            // Wenn Auto-Rotation aktiv ist, den Winkel inkrementieren
+            if (isRotating) {
+                rotationAngle += 0.005 * rotateSpeed;
+            }
+
+            // Umrechnung des Neigungswinkels von Grad in Bogenmaß (Tilt)
+            const tiltRad = (cameraTiltAngle * Math.PI) / 180;
+            
+            // Berechnung der horizontalen und vertikalen Abstände anhand der hypothetischen Kamerahöhe
+            const horizontalDistance = cameraYHeight * Math.sin(tiltRad);
+            const verticalDistance = cameraYHeight * Math.cos(tiltRad);
+
+            // Bestimme die neue dreidimensionale Kameraposition relativ zum aktuellen Fokus-Zentrum (camX, camZ)
+            const posX = camX + horizontalDistance * Math.sin(rotationAngle);
+            const posZ = camZ + horizontalDistance * Math.cos(rotationAngle);
+
+            camera.position.set(posX, verticalDistance, posZ);
+            camera.lookAt(camX, 0, camZ);
+
+            // Spezialfall für reine Draufsicht (0°): Um die Drehung sichtbar zu machen, rotieren wir das Kamera-Up
+            if (cameraTiltAngle === 0) {
+                camera.up.set(Math.sin(rotationAngle), 0, -Math.cos(rotationAngle));
+            } else {
+                camera.up.set(0, 1, 0); // Standard-Ausrichtung
+            }
+
+            if (isAnimated) {
+                animationTime += 0.01 * animSpeed;
+            }
+
+            updatePillars();
+
+            // Statusanzeigen aktualisieren
+            document.getElementById('cam-pos').textContent = `X: ${camX.toFixed(2)} | Z: ${camZ.toFixed(2)}`;
+            document.getElementById('cam-height-display').textContent = cameraYHeight.toFixed(1);
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
