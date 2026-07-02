@@ -811,23 +811,23 @@
             function startRecording() {
                 recordedChunks = [];
                 
-                // Unterstützte Videoformate detektieren (MP4 priorisieren) und Bitrate auf 25 Mbps erzwingen
-                let options = { mimeType: 'video/mp4; codecs="avc1.424028"', videoBitsPerSecond: 25000000 };
+                // Unterstützte Videoformate detektieren (MP4 priorisieren) und Bitrate auf 50 Mbps erzwingen
+                let options = { mimeType: 'video/mp4; codecs="avc1.424028"', videoBitsPerSecond: 50000000 };
                 let fileExt = 'mp4';
                 let blobType = 'video/mp4';
 
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { mimeType: 'video/mp4', videoBitsPerSecond: 25000000 };
+                    options = { mimeType: 'video/mp4', videoBitsPerSecond: 50000000 };
                 }
                 
                 // Fallback für Firefox oder Browser, die nativ kein MP4-Recording unterstützen
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 25000000 };
+                    options = { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 50000000 };
                     fileExt = 'webm';
                     blobType = 'video/webm';
                 }
                 if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-                    options = { videoBitsPerSecond: 25000000 }; // Absoluter Fallback
+                    options = { videoBitsPerSecond: 50000000 }; // Absoluter Fallback
                 }
 
                 try {
